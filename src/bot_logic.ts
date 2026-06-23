@@ -13,9 +13,10 @@ export async function fetchExchangeRates() {
         const usdData = await usdRes.json();
         const usdRate = usdData[0]?.rate?.toFixed(2) || 'Неизвестно';
 
-        const btcRes = await fetch('https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT');
+        // Используем CoinGecko, так как Binance блокирует IP-адреса серверов Vercel в США
+        const btcRes = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd');
         const btcData = await btcRes.json();
-        const btcPrice = parseFloat(btcData.price).toFixed(0) || 'Неизвестно';
+        const btcPrice = btcData.bitcoin?.usd ? btcData.bitcoin.usd.toFixed(0) : 'Неизвестно';
 
         return { usdRate, btcPrice };
     } catch (error) {
@@ -34,28 +35,42 @@ export async function generateBriefing(geminiApiKey: string, openWeatherApiKey: 
     // Получаем курсы
     const rates = await fetchExchangeRates();
 
-    const promptText = `Ты — мой личный ИИ-ассистент. Обращайся ко мне 'Артем'. Твой стиль: суровый, спортивный, дисциплинированный, 'серый' вайб. Стиль Дэвида Гоггинса. Никаких смайликов и нытья. 
+    const promptText = `Ты — мой личный ИИ-ассистент. Обращайся ко мне 'Артем'. Твой стиль: суровый, спортивный, дисциплинированный, 'серый' вайб. Никаких смайликов и нытья. 
 
 Данные на текущий момент:
 Погода в Лукьяновке: ${weatherData.main.temp}°C (ощущается ${weatherData.main.feels_like}°C), ${weatherData.weather[0].description}. Ветер: ${weatherData.wind.speed} м/с.
 Курс НБУ (USD/UAH): ${rates.usdRate} грн.
 Курс Bitcoin: $${rates.btcPrice}.
 
-Дай жесткую короткую сводку: 
-1. Погода и суровая рекомендация по экипировке.
-2. Коротко курсы (биток и доллар).
-3. Жесткая мотивационная фраза на день в стиле Гоггинса.`;
+Сформируй ответ строго в формате JSON, содержащий два поля:
+1. "text" - жесткая короткая сводка (погода, курсы, жесткая мотивация на день в стиле Гоггинса).
+2. "image_prompt" - промпт ДО 15 СЛОВ НА АНГЛИЙСКОМ для генерации атмосферной картинки погоды (стиль: dark cinematic, brutalist, realistic, grey vibe). Никакого текста на картинке.
+
+Верни только валидный JSON, без маркдауна и лишних символов. Пример:
+{"text": "Сводка...", "image_prompt": "dark sky..."}`;
 
     const aiResponse = await model.generateContent(promptText);
-    const text = aiResponse.response.text();
+    let responseText = aiResponse.response.text().trim();
+    
+    // Очистка от маркдауна, если ИИ всё же его добавит
+    if (responseText.startsWith('```json')) {
+        responseText = responseText.replace(/```json\n?/, '').replace(/```/g, '').trim();
+    }
 
-    // Генерируем промпт для картинки
-    const imagePromptInstruction = `Создай короткий промпт (до 15 слов) НА АНГЛИЙСКОМ ЯЗЫКЕ для генерации атмосферной картинки. Картинка должна отражать текущую погоду: ${weatherData.weather[0].description}, ${weatherData.main.temp}°C. Стиль: dark cinematic, brutalist, realistic, grey vibe. Никакого текста на картинке. Только пейзаж. Выведи ТОЛЬКО промпт на английском. Никаких лишних слов.`;
+    let parsedResponse;
+    try {
+        parsedResponse = JSON.parse(responseText);
+    } catch (e) {
+        console.error("Failed to parse Gemini JSON:", responseText);
+        parsedResponse = {
+            text: responseText, // Если не JSON, отдаем как текст
+            image_prompt: "dark cinematic grey sky, realistic, brutalist" // Дефолтный промпт
+        };
+    }
+
+    const text = parsedResponse.text || "Сводка готова. Действуй.";
+    let imagePrompt = parsedResponse.image_prompt || "dark cinematic grey sky, realistic, brutalist";
     
-    const imageAiResponse = await model.generateContent(imagePromptInstruction);
-    let imagePrompt = imageAiResponse.response.text().trim();
-    
-    // Удаляем возможные кавычки и переводы строк
     imagePrompt = imagePrompt.replace(/['"]/g, '').replace(/\n/g, ' ');
 
     const encodedPrompt = encodeURIComponent(imagePrompt);
