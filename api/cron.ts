@@ -1,6 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { Bot } from 'grammy';
-import { GoogleGenAI } from '@google/genai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     try {
@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const bot = new Bot(botToken);
 
         // Инициализация Gemini API
-        const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+        const ai = new GoogleGenerativeAI(geminiApiKey);
 
         // 1. Запрос погоды для села Лукьяновка (Белоцерковский район)
         // Координаты: 49.5080, 30.5705 (бывший Таращанский район)
@@ -42,12 +42,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 Влажность: ${weatherData.main.humidity}%
 Ветер: ${weatherData.wind.speed} м/с`;
 
-        const aiResponse = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-        });
+        const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const aiResponse = await model.generateContent(prompt);
 
-        const recommendation = aiResponse.text;
+        const recommendation = aiResponse.response.text();
 
         if (!recommendation) {
             throw new Error('Gemini API вернул пустой ответ');
