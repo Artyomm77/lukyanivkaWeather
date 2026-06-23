@@ -42,7 +42,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 Влажность: ${weatherData.main.humidity}%
 Ветер: ${weatherData.wind.speed} м/с`;
 
-        const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const model = ai.getGenerativeModel({ model: 'gemini-2.5-flash' });
         const aiResponse = await model.generateContent(prompt);
 
         const recommendation = aiResponse.response.text();
