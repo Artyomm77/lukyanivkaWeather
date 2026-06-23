@@ -19,7 +19,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const briefing = await generateBriefing(geminiApiKey, openWeatherApiKey);
 
         // Отправляем текстовую сводку
-        await bot.api.sendMessage(chatId, briefing.text, { parse_mode: 'HTML' });
+        await bot.api.sendMessage(chatId, briefing.text);
 
         return res.status(200).json({ success: true, message: 'Cron executed successfully' });
     } catch (error: any) {

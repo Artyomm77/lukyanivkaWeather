@@ -2,7 +2,6 @@ import { VercelRequest, VercelResponse } from '@vercel/node';
 import { Bot } from 'grammy';
 import { generateBriefing, generateChatResponse } from '../src/bot_logic';
 
-// Кэш обработанных апдейтов для предотвращения дублей от Telegram
 const processedUpdates = new Set<number>();
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -11,16 +10,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     try {
-        const update = req.body;
+        // Гарантируем, что update это объект
+        const update = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
         
-        // Защита от дублей (Telegram Retry Issue)
         if (update && update.update_id) {
             if (processedUpdates.has(update.update_id)) {
-                console.log('Ignored duplicate update:', update.update_id);
                 return res.status(200).send('OK');
             }
             processedUpdates.add(update.update_id);
-            // Чистим кэш
             if (processedUpdates.size > 500) {
                 const iterator = processedUpdates.values();
                 processedUpdates.delete(iterator.next().value);
@@ -38,13 +35,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const bot = new Bot(botToken);
 
         bot.command('now', async (ctx) => {
-            // Отправляем промежуточное сообщение
             const loadingMsg = await ctx.reply('Собираю данные. Жди.');
-            
             try {
                 const briefing = await generateBriefing(geminiApiKey, openWeatherApiKey);
-                await ctx.reply(briefing.text, { parse_mode: 'HTML' });
-                // Удаляем промежуточное сообщение
+                // Убрали parse_mode: 'HTML', чтобы избежать конфликтов с Markdown от Gemini
+                await ctx.reply(briefing.text);
                 await ctx.api.deleteMessage(ctx.chat.id, loadingMsg.message_id).catch(() => {});
             } catch (e: any) {
                 await ctx.reply(`Ошибка: ${e.message}`);
@@ -53,7 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         bot.on('message:text', async (ctx) => {
             const userMsg = ctx.message.text;
-            if (userMsg.startsWith('/')) return; // игнорируем неизвестные команды
+            if (userMsg.startsWith('/')) return;
             
             try {
                 const reply = await generateChatResponse(geminiApiKey, userMsg);
@@ -63,7 +58,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         });
 
-        // Прямая обработка без webhookCallback
         await bot.handleUpdate(update);
         
         return res.status(200).send('OK');
