@@ -1,9 +1,32 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { Bot, webhookCallback } from 'grammy';
+import { Bot } from 'grammy';
 import { generateBriefing, generateChatResponse } from '../src/bot_logic';
 
+// Кэш обработанных апдейтов для предотвращения дублей от Telegram
+const processedUpdates = new Set<number>();
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+    if (req.method !== 'POST') {
+        return res.status(200).send('OK');
+    }
+
     try {
+        const update = req.body;
+        
+        // Защита от дублей (Telegram Retry Issue)
+        if (update && update.update_id) {
+            if (processedUpdates.has(update.update_id)) {
+                console.log('Ignored duplicate update:', update.update_id);
+                return res.status(200).send('OK');
+            }
+            processedUpdates.add(update.update_id);
+            // Чистим кэш
+            if (processedUpdates.size > 500) {
+                const iterator = processedUpdates.values();
+                processedUpdates.delete(iterator.next().value);
+            }
+        }
+
         const botToken = process.env.TELEGRAM_BOT_TOKEN;
         const geminiApiKey = process.env.GEMINI_API_KEY;
         const openWeatherApiKey = process.env.OPENWEATHER_API_KEY;
@@ -20,9 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             
             try {
                 const briefing = await generateBriefing(geminiApiKey, openWeatherApiKey);
-                
                 await ctx.reply(briefing.text, { parse_mode: 'HTML' });
-                
                 // Удаляем промежуточное сообщение
                 await ctx.api.deleteMessage(ctx.chat.id, loadingMsg.message_id).catch(() => {});
             } catch (e: any) {
@@ -42,16 +63,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             }
         });
 
-        // Создаем обработчик webhook для Vercel
-        const cb = webhookCallback(bot, 'http');
+        // Прямая обработка без webhookCallback
+        await bot.handleUpdate(update);
         
-        return new Promise((resolve) => {
-            cb(req, res).then(() => resolve(undefined)).catch((err: any) => {
-                console.error('Webhook processing error:', err);
-                res.status(500).send('Error');
-                resolve(undefined);
-            });
-        });
+        return res.status(200).send('OK');
         
     } catch (error: any) {
         console.error('Webhook handler error:', error);
