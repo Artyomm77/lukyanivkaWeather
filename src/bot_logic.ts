@@ -25,9 +25,24 @@ export async function fetchExchangeRates() {
     }
 }
 
+async function generateWithFallback(ai: GoogleGenerativeAI, promptText: string) {
+    const models = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-flash-latest', 'gemini-pro'];
+    let lastError;
+    for (const modelName of models) {
+        try {
+            const model = ai.getGenerativeModel({ model: modelName });
+            const aiResponse = await model.generateContent(promptText);
+            return aiResponse;
+        } catch (e: any) {
+            console.error(`Model ${modelName} failed:`, e.message);
+            lastError = e;
+        }
+    }
+    throw lastError;
+}
+
 export async function generateBriefing(geminiApiKey: string, openWeatherApiKey: string): Promise<{ text: string, imageUrl: string }> {
     const ai = new GoogleGenerativeAI(geminiApiKey);
-    const model = ai.getGenerativeModel({ model: 'gemini-2.5-flash' });
 
     // Получаем погоду (Лукьяновка)
     const weatherData = await fetchWeather(openWeatherApiKey, 49.5080, 30.5705);
@@ -49,7 +64,7 @@ export async function generateBriefing(geminiApiKey: string, openWeatherApiKey: 
 Верни только валидный JSON, без маркдауна и лишних символов. Пример:
 {"text": "Сводка...", "image_prompt": "dark sky..."}`;
 
-    const aiResponse = await model.generateContent(promptText);
+    const aiResponse = await generateWithFallback(ai, promptText);
     let responseText = aiResponse.response.text().trim();
     
     // Очистка от маркдауна, если ИИ всё же его добавит
@@ -74,16 +89,16 @@ export async function generateBriefing(geminiApiKey: string, openWeatherApiKey: 
     imagePrompt = imagePrompt.replace(/['"]/g, '').replace(/\n/g, ' ');
 
     const encodedPrompt = encodeURIComponent(imagePrompt);
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=800&nologo=true`;
+    // Добавим random параметр, чтобы избежать кэширования Telegram или Pollinations
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=800&nologo=true&seed=${Math.floor(Math.random() * 100000)}`;
 
     return { text, imageUrl };
 }
 
 export async function generateChatResponse(geminiApiKey: string, userMessage: string): Promise<string> {
     const ai = new GoogleGenerativeAI(geminiApiKey);
-    const model = ai.getGenerativeModel({ model: 'gemini-2.5-flash' });
     const prompt = `Ты суровый личный ИИ-ассистент Артема. Отвечай жестко, кратко, в стиле дисциплины и Дэвида Гоггинса. Никаких смайликов. 
 Вопрос Артема: "${userMessage}"`;
-    const res = await model.generateContent(prompt);
+    const res = await generateWithFallback(ai, prompt);
     return res.response.text();
 }

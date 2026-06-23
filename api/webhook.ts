@@ -21,9 +21,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             try {
                 const briefing = await generateBriefing(geminiApiKey, openWeatherApiKey);
                 
-                await ctx.replyWithPhoto(briefing.imageUrl, { 
-                    caption: briefing.text 
-                });
+                try {
+                    await ctx.replyWithPhoto(briefing.imageUrl, { 
+                        caption: briefing.text 
+                    });
+                } catch (photoError: any) {
+                    console.error("Failed to send photo:", photoError.message);
+                    // Если картинка сломалась (Bad Request), отправляем хотя бы текст
+                    await ctx.reply(briefing.text);
+                }
                 
                 // Удаляем промежуточное сообщение
                 await ctx.api.deleteMessage(ctx.chat.id, loadingMsg.message_id).catch(() => {});

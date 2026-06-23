@@ -18,11 +18,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         // Генерируем сводку и картинку
         const briefing = await generateBriefing(geminiApiKey, openWeatherApiKey);
 
-        // Отправляем картинку с текстом
-        await bot.api.sendPhoto(chatId, briefing.imageUrl, { 
-            caption: briefing.text,
-            parse_mode: 'HTML' // На всякий случай
-        });
+        try {
+            // Отправляем картинку с текстом
+            await bot.api.sendPhoto(chatId, briefing.imageUrl, { 
+                caption: briefing.text,
+                parse_mode: 'HTML' // На всякий случай
+            });
+        } catch (photoError: any) {
+            console.error("Failed to send photo in cron:", photoError.message);
+            await bot.api.sendMessage(chatId, briefing.text, { parse_mode: 'HTML' });
+        }
 
         return res.status(200).json({ success: true, message: 'Cron executed successfully' });
     } catch (error: any) {
