@@ -57,42 +57,15 @@ export async function generateBriefing(geminiApiKey: string, openWeatherApiKey: 
 Курс НБУ (USD/UAH): ${rates.usdRate} грн.
 Курс Bitcoin: $${rates.btcPrice}.
 
-Сформируй ответ строго в формате JSON, содержащий два поля:
-1. "text" - жесткая короткая сводка (погода, курсы, жесткая мотивация на день в стиле Гоггинса).
-2. "image_prompt" - промпт ДО 15 СЛОВ НА АНГЛИЙСКОМ для генерации атмосферной картинки погоды (стиль: dark cinematic, brutalist, realistic, grey vibe). Никакого текста на картинке.
-
-Верни только валидный JSON, без маркдауна и лишних символов. Пример:
-{"text": "Сводка...", "image_prompt": "dark sky..."}`;
+Дай жесткую короткую сводку: 
+1. Погода и суровая рекомендация по экипировке.
+2. Коротко курсы (биток и доллар).
+3. Жесткая мотивационная фраза на день в стиле Гоггинса.`;
 
     const aiResponse = await generateWithFallback(ai, promptText);
-    let responseText = aiResponse.response.text().trim();
-    
-    // Очистка от маркдауна, если ИИ всё же его добавит
-    if (responseText.startsWith('```json')) {
-        responseText = responseText.replace(/```json\n?/, '').replace(/```/g, '').trim();
-    }
+    const text = aiResponse.response.text().trim() || "Сводка готова. Действуй.";
 
-    let parsedResponse;
-    try {
-        parsedResponse = JSON.parse(responseText);
-    } catch (e) {
-        console.error("Failed to parse Gemini JSON:", responseText);
-        parsedResponse = {
-            text: responseText, // Если не JSON, отдаем как текст
-            image_prompt: "dark cinematic grey sky, realistic, brutalist" // Дефолтный промпт
-        };
-    }
-
-    const text = parsedResponse.text || "Сводка готова. Действуй.";
-    let imagePrompt = parsedResponse.image_prompt || "dark cinematic grey sky, realistic, brutalist";
-    
-    imagePrompt = imagePrompt.replace(/['"]/g, '').replace(/\n/g, ' ');
-
-    const encodedPrompt = encodeURIComponent(imagePrompt);
-    // Добавим random параметр, чтобы избежать кэширования Telegram или Pollinations
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=800&nologo=true&seed=${Math.floor(Math.random() * 100000)}`;
-
-    return { text, imageUrl };
+    return { text, imageUrl: "" };
 }
 
 export async function generateChatResponse(geminiApiKey: string, userMessage: string): Promise<string> {

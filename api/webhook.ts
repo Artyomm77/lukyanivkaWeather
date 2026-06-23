@@ -15,21 +15,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const bot = new Bot(botToken);
 
         bot.command('now', async (ctx) => {
-            // Отправляем промежуточное сообщение, чтобы показать, что бот думает
+            // Отправляем промежуточное сообщение
             const loadingMsg = await ctx.reply('Собираю данные. Жди.');
             
             try {
                 const briefing = await generateBriefing(geminiApiKey, openWeatherApiKey);
                 
-                try {
-                    await ctx.replyWithPhoto(briefing.imageUrl, { 
-                        caption: briefing.text 
-                    });
-                } catch (photoError: any) {
-                    console.error("Failed to send photo:", photoError.message);
-                    // Если картинка сломалась (Bad Request), отправляем хотя бы текст
-                    await ctx.reply(briefing.text);
-                }
+                await ctx.reply(briefing.text, { parse_mode: 'HTML' });
                 
                 // Удаляем промежуточное сообщение
                 await ctx.api.deleteMessage(ctx.chat.id, loadingMsg.message_id).catch(() => {});
